@@ -1,13 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define MAX_TAB_ROT 32
 #define IP_SIZE 16
 struct tabRot{
     int saltos;
     char destino[IP_SIZE];
-    char saida[IP_SIZE];};
+    char saida[IP_SIZE];
+    clock_t lastUp;};
 
 struct tabRot tabRots[MAX_TAB_ROT];
 char atualizado[MAX_TAB_ROT] = {};
@@ -17,15 +19,24 @@ int size = 0;
 //=======================================================//
 
 void printTab(){ //printar toda vez que atalizar a tabela
+    char flag = 1;
+    for(int i = 0; i < size; i++){
+        if(atualizado[i]){
+            flag = 0;
+            break;}}
+
+    if(flag) //se a tabela não foi atualizada
+        return;
+
     printf("Destino         | Saltos | Saida\n");
     puts("------------------------------------------------");
     for(int i = 0; i < size; i++){
+        atualizado[i] = 0;
         if(tabRots[i].saltos == -1) continue;
         printf("%-15s |", tabRots[i].destino);
         printf(" %-6d |", tabRots[i].saltos);
         printf(" %-15s |", tabRots[i].saida);
-        printf(" %c |\n", ((atualizado[i] == 1) ? '+' : (atualizado[i] == 2) ? 'R' : ' '));
-        atualizado[i] = 0;}
+        printf(" %c |\n", ((atualizado[i] == 1) ? '+' : (atualizado[i] == 2) ? 'R' : ' '));}
     puts("------------------------------------------------");}
 
 //=======================================================//
@@ -39,13 +50,13 @@ void tabRotInit(){
         strcpy(tabRots[i].saida, c);
         strcpy(tabRots[i].destino, c);
         tabRots[i].saltos = 1;
+        tabRots[i].lastUp = clock();
         atualizado[i++] = 1;}
     size = i;
     fclose(f);
     i = 0;
     char buff[32] = {};
     snprintf(buff, 32, "@%s", ip);
-    printf("buff -> %s\n", buff);
     while(i < size){
         if(tabRots[i].saltos == 1){
             //sendTo(buff, tabRots[i].saida);
@@ -54,7 +65,7 @@ void tabRotInit(){
 
 //=======================================================//
 
-void send(){ //enviar de 10 em 10 segundos para todos com conexão direta
+void sendTab(){ //enviar de 10 em 10 segundos para todos com conexão direta
     for(int i = 0; i < size; i++){
         if(tabRots[i].saltos != 1) continue;
         char aux[32] = "";
@@ -64,8 +75,7 @@ void send(){ //enviar de 10 em 10 segundos para todos com conexão direta
                 snprintf(aux, 32,"*%s;%d", tabRots[j].destino, tabRots[j].saltos);
                 strcat(buff, aux);}
         //sentTo(buff, tabRots[i].saida);
-        }
-}
+        }}
 
 //=======================================================//
 
@@ -99,56 +109,66 @@ int separaString(char *buff, char *ipn, int *saltos){
 
 //=======================================================//
 
-void recive(){
-    char buff[1024] = {"@192.160.0.1"}; //{"*666.666.666.666;2*123.123.123.123;12*123.123.123.123;9"};
+void recive(char *msg, char *ipMsg){
     char ipn[IP_SIZE];
-    char ipMsg[IP_SIZE] = {"111.111.111.111"}; //ip de quem mandou a msg
-    int saltos;
-    //reciveMsg(buff, ipn);
-    if(buff[0] == '@'){ //se for msg de anúncio
-        printf("Msg de anúncio com ip %s\n", buff+1);
+    if(msg[0] == '@'){ //se for msg de anúncio
         int index = estaTab(ipn);
         if(index >= 0){
             tabRots[index].saltos = 1;
-            strcpy(tabRots[index].saida, buff+1);
+            strcpy(tabRots[index].saida, msg+1);
+            tabRots[index].lastUp = clock();
             atualizado[index] = 2;}
         else{
-            strcpy(tabRots[size].destino, buff+1);
-            strcpy(tabRots[size].saida, buff+1);
+            strcpy(tabRots[size].destino, msg+1);
+            strcpy(tabRots[size].saida, msg+1);
             tabRots[size].saltos = 1;
+            tabRots[size].lastUp = clock();
             atualizado[size++] = 1;}
         return;}
 
+    int saltos;
     int i = 0;
-    while(buff[i] != '\0'){ //enquanto não estiver vazio
-        i += separaString(buff+i, ipn, &saltos);
+    while(msg[i] != '\0'){ //enquanto não estiver vazio
+        i += separaString(msg+i, ipn, &saltos);
         if(strcmp(ipn, ip) == 0) continue; //se receber rota pra si mesmo
         int index = estaTab(ipn);
         if(index >= 0 && (tabRots[index].saltos > saltos+1 || tabRots[index].saltos == -1)){
             tabRots[index].saltos = saltos+1;
             strcpy(tabRots[index].saida, ipMsg);
+            tabRots[index].lastUp = clock();
             atualizado[index] = 2;}
         else{
             strcpy(tabRots[size].destino, ipn);
             strcpy(tabRots[size].saida, ipMsg);
             tabRots[size].saltos = saltos+1;
+            tabRots[size].lastUp = clock();
             atualizado[size++] = 1;}}}
 
 //=======================================================//
 
 void removeTab(char *ipn){
-    for(int i = 0; i < size; i++){
-        if(strcmp(ipn, tabRots[i].saida) == 0)
-            tabRots[i].saltos = -1;}}
+    for(int i = 0; i < size; i++)
+        if(strcmp(ipn, tabRots[i].saida) == 0){
+            tabRots[i].saltos = -1;
+            atualizado[i] = -1;}}
+
+//=======================================================//
+
+void checkLastUp(){
+    for(int i = 0; i < size; i++)
+        if(tabRots[i].lastUp != -1 && (clock() - tabRots[i].lastUp)/CLOCKS_PER_SEC >= 15){
+            tabRots[i].lastUp = -1;
+            tabRots[i].saltos = -1;
+            atualizado[i] = -1;}}
 
 //=======================================================//
             
-int main(){
-    tabRotInit();
-    printTab();
-    recive();
-    send();
-    printTab();
-    removeTab("192.160.0.1");
-    printTab();
-}
+// int main(){
+//     tabRotInit();
+//     printTab();
+//     recive();
+//     sendTab();
+//     printTab();
+//     removeTab("192.160.0.1");
+//     printTab();
+// }
