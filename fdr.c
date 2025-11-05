@@ -1,10 +1,15 @@
 #include <stdio.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #define MAX_TAB_ROT 32
 #define IP_SIZE 16
+
 struct tabRot{
     int saltos;
     char destino[IP_SIZE];
@@ -15,19 +20,14 @@ struct tabRot tabRots[MAX_TAB_ROT];
 char atualizado[MAX_TAB_ROT] = {};
 char ip[IP_SIZE] = "000.000.000.000";
 int size = 0;
+extern struct sockaddr_in roteadorAddr, sendAddr;
+extern char tab;
+extern int sd;
 
 //=======================================================//
 
 void printTab(){ //printar toda vez que atalizar a tabela
-    char flag = 1;
-    for(int i = 0; i < size; i++){
-        if(atualizado[i]){
-            flag = 0;
-            break;}}
-
-    if(flag) //se a tabela não foi atualizada
-        return;
-
+    if(tab == 0) return;
     printf("Destino         | Saltos | Saida\n");
     puts("------------------------------------------------");
     for(int i = 0; i < size; i++){
@@ -59,8 +59,8 @@ void tabRotInit(){
     snprintf(buff, 32, "@%s", ip);
     while(i < size){
         if(tabRots[i].saltos == 1){
-            //sendTo(buff, tabRots[i].saida);
-        }
+            memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[i].saida, sizeof(tabRots[i].saida));
+            sendto(sd, buff, strlen(buff)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));}
         i++;}}
 
 //=======================================================//
@@ -74,7 +74,8 @@ void sendTab(){ //enviar de 10 em 10 segundos para todos com conexão direta
             if(strcmp(tabRots[i].saida, tabRots[j].saida)){ //Split Horazion
                 snprintf(aux, 32,"*%s;%d", tabRots[j].destino, tabRots[j].saltos);
                 strcat(buff, aux);}
-        //sentTo(buff, tabRots[i].saida);
+        memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[i].saida, sizeof(tabRots[i].saida));
+        sendto(sd, buff, strlen(buff)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));
         }}
 
 //=======================================================//
@@ -94,15 +95,12 @@ int separaString(char *buff, char *ipn, int *saltos){
 
     if(buff[count] == '*') count++;
 
-    while(buff[count] != ';'){
-            ipn[i++] = buff[count];
-            count++;}
+    while(buff[count] != ';') ipn[i++] = buff[count++];
     ipn[i] = '\0';
     count++;
+
     i = 0;
-    while(buff[count] != '*' && buff[count] != '\0'){
-        c[i++] = buff[count];
-        count++;}
+    while(buff[count] != '*' && buff[count] != '\0') c[i++] = buff[count++];
     c[i] = '\0';
     *saltos = atoi(c);
     return count;}
@@ -149,6 +147,7 @@ void recive(char *msg, char *ipMsg){
 void removeTab(char *ipn){
     for(int i = 0; i < size; i++)
         if(strcmp(ipn, tabRots[i].saida) == 0){
+            tabRots[i].lastUp = -1;
             tabRots[i].saltos = -1;
             atualizado[i] = -1;}}
 
@@ -156,7 +155,9 @@ void removeTab(char *ipn){
 
 void checkLastUp(){
     for(int i = 0; i < size; i++)
-        if(tabRots[i].lastUp != -1 && (clock() - tabRots[i].lastUp)/CLOCKS_PER_SEC >= 15){
+        if(tabRots[i].lastUp != -1 && (clock() - tabRots[i].lastUp)/(CLOCKS_PER_SEC*2) >= 15){
+            if(tabRots[i].saltos == 1)
+                removeTab(tabRots[i].saida);
             tabRots[i].lastUp = -1;
             tabRots[i].saltos = -1;
             atualizado[i] = -1;}}
