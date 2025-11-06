@@ -1,7 +1,3 @@
-/* fpont 12/99 */
-/* pont.net    */
-/* udpServer.c */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -9,8 +5,8 @@
 #include <netdb.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h> /* close() */
-#include <string.h> /* memset() */
+#include <unistd.h>
+#include <string.h>
 #include <pthread.h>
 #include "fdr.c"
 
@@ -21,7 +17,7 @@
 char flag = 1;
 char tab = 1;
 char msgLida = 1;
-char msg[MAX_MSG] = "!111.111.111.111;000.000.000.000;Ola\0";
+char msg[MAX_MSG] = ""; //"!111.111.111.111;000.000.000.000;Ola\0";
 int sd;
 struct sockaddr_in roteadorAddr, sendAddr;
 pthread_mutex_t mutex_stdin;
@@ -47,17 +43,23 @@ void separaStr(char *buff, char *ipo, char *ipd){
 
 //=======================================================//
 
-void *reciveThread(void*){
+void *reciveThread(){
     char ipo[IP_SIZE] = ""; //ip origem
     char ipd[IP_SIZE] = ""; //ip destino
     while(flag){
         if(msgLida){
             pthread_mutex_lock(&mutex_recive);
             msgLida = 0;
-            //recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &cliAddr, &cliLen); //mudar os endereços
+            recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &cliAddr, &cliLen); //mudar os endereços
             if(msg[0] == '!'){
                 separaStr(msg, ipo, ipd);
                 msgLida = 1;
+                if(strcmp(ip, ipd) == 0){
+                    int aux = estaTab(ipd);
+                    if(aux >= 0){
+                        snprintf(msg, MAX_MSG, "!%s;%s;%s", ipo, ipd, msg);
+                        memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[aux].saida, sizeof(tabRots[aux].saida));
+                        sendto(sd, msg, strlen(msg)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));}}
                 pthread_mutex_lock(&mutex_stdin);
                 printf("\nIp origem: %s\nIp destino: %s\nMensagem: %s\n%s\n", ipo, ipd, msg, (strcmp(ip, ipd) ? "Mensagem repassada\0" : "Mensagem chegou ao destino\n\0"));
                 pthread_mutex_unlock(&mutex_stdin);}
@@ -65,7 +67,9 @@ void *reciveThread(void*){
 
 //=======================================================//
 
-void *terminalThread(void*){
+void *terminalThread(){
+    char ipo[IP_SIZE] = ""; 
+    char ipd[IP_SIZE] = "";
     while(flag){
         char buff[128];
         fgets(buff, 128, stdin);
@@ -79,9 +83,12 @@ void *terminalThread(void*){
         int i = 0;
         while(buff[i++] != '\n');
         buff[i-1] = '\0';
-        //fazer enviar para a msg para o ip destino
-      }
-}
+        separaStr(buff, ipo, ipd);
+        snprintf(buff, MAX_MSG, "!%s;%s;%s", ipo, ipd, buff);
+        int aux = estaTab(ipd);
+        if(aux >= 0){
+            memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[aux].saida, sizeof(tabRots[aux].saida));
+            sendto(sd, buff, strlen(buff)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));}}}
 
 //=======================================================//
 
