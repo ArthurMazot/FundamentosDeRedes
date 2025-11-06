@@ -19,7 +19,7 @@ char tab = 1;
 char msgLida = 1;
 char msg[MAX_MSG] = ""; //"!111.111.111.111;000.000.000.000;Ola\0";
 int sd;
-struct sockaddr_in roteadorAddr, sendAddr;
+struct sockaddr_in reciveAddr, sendAddr;
 pthread_mutex_t mutex_stdin;
 pthread_mutex_t mutex_recive;
 
@@ -46,11 +46,12 @@ void separaStr(char *buff, char *ipo, char *ipd){
 void *reciveThread(){
     char ipo[IP_SIZE] = ""; //ip origem
     char ipd[IP_SIZE] = ""; //ip destino
+    int sizeRecive = sizeof(reciveAddr);
     while(flag){
         if(msgLida){
             pthread_mutex_lock(&mutex_recive);
             msgLida = 0;
-            recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &cliAddr, &cliLen); //mudar os endereços
+            recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &reciveAddr, &sizeRecive);
             if(msg[0] == '!'){
                 separaStr(msg, ipo, ipd);
                 msgLida = 1;
@@ -78,7 +79,7 @@ void *terminalThread(){
 
         if(strcmp(buff, "exit\n\0") == 0){
             flag = 0;
-            return;}
+            return 0;}
         if(buff[0] != '!') continue;
         int i = 0;
         while(buff[i++] != '\n');
@@ -101,12 +102,9 @@ int main(int argc, char *argv[]) {
         exit(1);}
 
     sendAddr.sin_family = AF_INET;
+    sendAddr.sin_addr.s_addr = htonl(INADDR_ANY);
     sendAddr.sin_port = htons(LOCAL_SERVER_PORT);
-
-    roteadorAddr.sin_family = AF_INET;
-    roteadorAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    roteadorAddr.sin_port = htons(LOCAL_SERVER_PORT);
-    rc = bind(sd, (struct sockaddr *) &roteadorAddr, sizeof(roteadorAddr));
+    rc = bind(sd, (struct sockaddr *) &sendAddr, sizeof(sendAddr));
 
     if(rc<0){
         printf("%s: cannot bind port number %d \n", argv[0], LOCAL_SERVER_PORT);
@@ -124,7 +122,7 @@ int main(int argc, char *argv[]) {
     clock_t t = clock();
 
     while(flag){
-        if((clock() - t)/(CLOCKS_PER_SEC*2) >= 10){
+        if((clock() - t)/(CLOCKS_PER_SEC) >= 10){
             t = clock();
             sendTab();
             pthread_mutex_lock(&mutex_stdin);
@@ -135,7 +133,8 @@ int main(int argc, char *argv[]) {
         
         pthread_mutex_lock(&mutex_recive);
         if(msgLida == 0){
-            //recive(msg, ""); //descobrir como pegar o ip
+            recive(msg, inet_ntoa(reciveAddr.sin_addr));
+            puts("Aqui");
             msgLida = 1;}
         pthread_mutex_unlock(&mutex_recive);}
 

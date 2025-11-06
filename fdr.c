@@ -155,7 +155,7 @@ void removeTab(char *ipn){
 
 void checkLastUp(){
     for(int i = 0; i < size; i++)
-        if(tabRots[i].lastUp != -1 && (clock() - tabRots[i].lastUp)/(CLOCKS_PER_SEC*2) >= 15){
+        if(tabRots[i].lastUp != -1 && (clock() - tabRots[i].lastUp)/(CLOCKS_PER_SEC) >= 15){
             if(tabRots[i].saltos == 1)
                 removeTab(tabRots[i].saida);
             tabRots[i].lastUp = -1;
