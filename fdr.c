@@ -18,8 +18,8 @@ struct tabRot{
 
 struct tabRot tabRots[MAX_TAB_ROT];
 char atualizado[MAX_TAB_ROT] = {};
-char ip[IP_SIZE] = "000.000.000.000";
 int size = 0;
+extern char ip[IP_SIZE];
 extern struct sockaddr_in roteadorAddr, sendAddr;
 extern char tab;
 extern int sd;
@@ -31,12 +31,12 @@ void printTab(){ //printar toda vez que atalizar a tabela
     printf("Destino         | Saltos | Saida\n");
     puts("------------------------------------------------");
     for(int i = 0; i < size; i++){
-        atualizado[i] = 0;
         if(tabRots[i].saltos == -1) continue;
         printf("%-15s |", tabRots[i].destino);
         printf(" %-6d |", tabRots[i].saltos);
         printf(" %-15s |", tabRots[i].saida);
-        printf(" %c |\n", ((atualizado[i] == 1) ? '+' : (atualizado[i] == 2) ? 'R' : ' '));}
+        printf(" %c |\n", ((atualizado[i] == 1) ? '+' : (atualizado[i] == 2) ? 'R' : ' '));
+        atualizado[i] = 0;}
     puts("------------------------------------------------");}
 
 //=======================================================//
@@ -59,7 +59,7 @@ void tabRotInit(){
     snprintf(buff, 32, "@%s", ip);
     while(i < size){
         if(tabRots[i].saltos == 1){
-            memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[i].saida, sizeof(tabRots[i].saida));
+            sendAddr.sin_addr.s_addr = inet_addr(tabRots[i].saida);
             sendto(sd, buff, strlen(buff)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));}
         i++;}}
 
@@ -74,9 +74,9 @@ void sendTab(){ //enviar de 10 em 10 segundos para todos com conexão direta
             if(strcmp(tabRots[i].saida, tabRots[j].saida)){ //Split Horazion
                 snprintf(aux, 32,"*%s;%d", tabRots[j].destino, tabRots[j].saltos);
                 strcat(buff, aux);}
-        memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[i].saida, sizeof(tabRots[i].saida));
-        sendto(sd, buff, strlen(buff)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));
-        }}
+        printf("%s\n", buff);
+        sendAddr.sin_addr.s_addr = inet_addr(tabRots[i].saida);
+        sendto(sd, buff, strlen(buff)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));}}
 
 //=======================================================//
 
@@ -161,15 +161,3 @@ void checkLastUp(){
             tabRots[i].lastUp = -1;
             tabRots[i].saltos = -1;
             atualizado[i] = -1;}}
-
-//=======================================================//
-            
-// int main(){
-//     tabRotInit();
-//     printTab();
-//     recive();
-//     sendTab();
-//     printTab();
-//     removeTab("192.160.0.1");
-//     printTab();
-// }

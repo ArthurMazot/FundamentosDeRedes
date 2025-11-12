@@ -14,12 +14,13 @@
 #define MAX_MSG 256
 #define IP_SIZE 16
 
+char ip[IP_SIZE];
 char flag = 1;
 char tab = 1;
 char msgLida = 1;
-char msg[MAX_MSG] = ""; //"!111.111.111.111;000.000.000.000;Ola\0";
+char msg[MAX_MSG];
 int sd;
-struct sockaddr_in reciveAddr, sendAddr;
+struct sockaddr_in reciveAddr, sendAddr, roteadorAddr;
 pthread_mutex_t mutex_stdin;
 pthread_mutex_t mutex_recive;
 
@@ -49,9 +50,9 @@ void *reciveThread(){
     int sizeRecive = sizeof(reciveAddr);
     while(flag){
         if(msgLida){
+            recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &reciveAddr, &sizeRecive);
             pthread_mutex_lock(&mutex_recive);
             msgLida = 0;
-            recvfrom(sd, msg, MAX_MSG, 0, (struct sockaddr *) &reciveAddr, &sizeRecive);
             if(msg[0] == '!'){
                 separaStr(msg, ipo, ipd);
                 msgLida = 1;
@@ -59,10 +60,10 @@ void *reciveThread(){
                     int aux = estaTab(ipd);
                     if(aux >= 0){
                         snprintf(msg, MAX_MSG, "!%s;%s;%s", ipo, ipd, msg);
-                        memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[aux].saida, sizeof(tabRots[aux].saida));
+                        sendAddr.sin_addr.s_addr = inet_addr(tabRots[aux].saida);
                         sendto(sd, msg, strlen(msg)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));}}
                 pthread_mutex_lock(&mutex_stdin);
-                printf("\nIp origem: %s\nIp destino: %s\nMensagem: %s\n%s\n", ipo, ipd, msg, (strcmp(ip, ipd) ? "Mensagem repassada\0" : "Mensagem chegou ao destino\n\0"));
+                printf("\nIp origem: %s\nIp destino: %s\nMensagem: %s\n%s\n", ipo, ipd, msg, (strcmp(ip, ipd) ? "Mensagem repassada" : "Mensagem chegou ao destino"));
                 pthread_mutex_unlock(&mutex_stdin);}
             pthread_mutex_unlock(&mutex_recive);}}}
 
@@ -88,13 +89,23 @@ void *terminalThread(){
         snprintf(buff, MAX_MSG, "!%s;%s;%s", ipo, ipd, buff);
         int aux = estaTab(ipd);
         if(aux >= 0){
-            memcpy((char *) &sendAddr.sin_addr.s_addr, tabRots[aux].saida, sizeof(tabRots[aux].saida));
+            sendAddr.sin_addr.s_addr = inet_addr(tabRots[aux].saida);
             sendto(sd, buff, strlen(buff)+1, 0, (struct sockaddr *) &sendAddr, sizeof(sendAddr));}}}
 
 //=======================================================//
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]){
+    char hostbuffer[256];
+    struct hostent *host_entry;
+    int hostname;
     int rc;
+    hostname = gethostname(hostbuffer, sizeof(hostbuffer));
+    host_entry = gethostbyname(hostbuffer);
+    strcpy(ip, inet_ntoa(*((struct in_addr*) host_entry->h_addr_list[0])));
+
+    printf("Hostname: %s\n", hostbuffer);
+    printf("Host IP: %s\n", ip);
+
 
     sd=socket(AF_INET, SOCK_DGRAM, 0);
     if(sd<0){
@@ -102,9 +113,12 @@ int main(int argc, char *argv[]) {
         exit(1);}
 
     sendAddr.sin_family = AF_INET;
-    sendAddr.sin_addr.s_addr = htonl(INADDR_ANY);
     sendAddr.sin_port = htons(LOCAL_SERVER_PORT);
-    rc = bind(sd, (struct sockaddr *) &sendAddr, sizeof(sendAddr));
+    
+    roteadorAddr.sin_family = AF_INET;
+    roteadorAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    roteadorAddr.sin_port = htons(LOCAL_SERVER_PORT);
+    rc = bind(sd, (struct sockaddr *) &roteadorAddr, sizeof(roteadorAddr));
 
     if(rc<0){
         printf("%s: cannot bind port number %d \n", argv[0], LOCAL_SERVER_PORT);
@@ -131,12 +145,11 @@ int main(int argc, char *argv[]) {
 
         checkLastUp();
         
-        pthread_mutex_lock(&mutex_recive);
         if(msgLida == 0){
+            pthread_mutex_lock(&mutex_recive);
             recive(msg, inet_ntoa(reciveAddr.sin_addr));
-            puts("Aqui");
-            msgLida = 1;}
-        pthread_mutex_unlock(&mutex_recive);}
+            msgLida = 1;
+            pthread_mutex_unlock(&mutex_recive);}}
 
     pthread_join(thread1, NULL);
     pthread_join(thread2, NULL);
