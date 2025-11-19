@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
-#include "fdr.c"
+#include "funcoes.c"
 
 #define LOCAL_SERVER_PORT 6000
 #define MAX_MSG 256
